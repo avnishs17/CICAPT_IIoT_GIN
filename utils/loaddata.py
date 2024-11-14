@@ -25,119 +25,75 @@ def process_provenance_data(csv_path, output_path, is_phase2=False):
     # Read CSV file
     df = pd.read_csv(csv_path)
     
-    # Initialize list to store all graphs
-    graphs = []
-    
-    # First pass: Collect all nodes and their features
-    print("Collecting nodes...")
-    current_graph = {
+    # Initialize data structure
+    data = {
         'metadata': {
             'num_nodes': 0,
             'num_edges': 0,
-            'label': 0,  # Default label (benign)
-            'graph_id': 0  # Will be updated for each graph
-        },
-        'nodes': {},
-        'edges': []
-    }
-    
-    graph_id = 0
-    
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
-        if pd.notna(row['id']):  # Node row
-            node_id = row['id']
-            
-            # Create node entry with structured features
-            node_entry = {
-                'id': node_id,
-                'common_features': {},
-                'features': {}
-            }
-            
-            # Process common features
-            for feat in common_features:
-                if feat in row and pd.notna(row[feat]):
-                    node_entry['common_features'][feat] = row[feat]
-            
-            # Process node-specific features
-            for feat in node_features:
-                if feat in row and pd.notna(row[feat]):
-                    node_entry['features'][feat] = row[feat]
-            
-            current_graph['nodes'][node_id] = node_entry
-            
-            # Update label if Phase2
-            if is_phase2 and 'label' in row and pd.notna(row['label']) and int(row['label']) == 1:
-                current_graph['metadata']['label'] = 1
-                
-        else:  # Edge row
-            if pd.notna(row['from']) and pd.notna(row['to']):
-                src_id = row['from']
-                dst_id = row['to']
-                
-                # Skip if either source or destination node is missing
-                if src_id not in current_graph['nodes'] or dst_id not in current_graph['nodes']:
-                    continue
-                
-                # Create edge entry with structured features
-                edge_entry = {
-                    'source': src_id,
-                    'target': dst_id,
-                    'features': {}
-                }
-                
-                # Process edge features
-                for feat in edge_features:
-                    if feat in row and pd.notna(row[feat]):
-                        edge_entry['features'][feat] = row[feat]
-                
-                current_graph['edges'].append(edge_entry)
-                
-                # Update metadata
-                current_graph['metadata']['num_edges'] += 1
-                
-                # When edge is processed, finalize the current graph and start a new one
-                if len(current_graph['edges']) > 0:
-                    # Update final metadata
-                    current_graph['metadata']['num_nodes'] = len(current_graph['nodes'])
-                    current_graph['metadata']['graph_id'] = graph_id
-                    
-                    # Add to graphs list
-                    graphs.append(current_graph)
-                    
-                    # Start new graph
-                    graph_id += 1
-                    current_graph = {
-                        'metadata': {
-                            'num_nodes': 0,
-                            'num_edges': 0,
-                            'label': 0,
-                            'graph_id': graph_id
-                        },
-                        'nodes': {},
-                        'edges': []
-                    }
-    
-    # Save processed data with structured format
-    print(f"Saving {len(graphs)} graphs to {output_path}")
-    output_data = {
-        'dataset_metadata': {
-            'total_graphs': len(graphs),
             'is_phase2': is_phase2,
-            'feature_lists': {
+            'features': {
                 'common_features': common_features,
                 'node_features': node_features,
                 'edge_features': edge_features
             }
         },
-        'graphs': graphs
+        'nodes': {},
+        'edges': []
     }
     
+    # Process nodes
+    print("Processing nodes...")
+    for idx, row in tqdm(df.iterrows(), desc="Processing nodes"):
+        if pd.notna(row['id']):
+            node_id = row['id']
+            node_features_dict = {}
+            
+            # Add common features
+            for feat in common_features:
+                if feat in row and pd.notna(row[feat]):
+                    node_features_dict[feat] = row[feat]
+            
+            # Add node-specific features
+            for feat in node_features:
+                if feat in row and pd.notna(row[feat]):
+                    node_features_dict[feat] = row[feat]
+            
+            # Add label for Phase2
+            if is_phase2 and 'label' in row and pd.notna(row['label']):
+                node_features_dict['label'] = int(row['label'])
+            
+            data['nodes'][node_id] = node_features_dict
+    
+    # Process edges
+    print("Processing edges...")
+    for idx, row in tqdm(df.iterrows(), desc="Processing edges"):
+        if pd.isna(row['id']) and pd.notna(row['from']) and pd.notna(row['to']):
+            edge_features_dict = {}
+            
+            # Add edge features
+            for feat in edge_features:
+                if feat in row and pd.notna(row[feat]):
+                    edge_features_dict[feat] = row[feat]
+            
+            edge = {
+                'source': row['from'],
+                'target': row['to'],
+                'features': edge_features_dict
+            }
+            
+            data['edges'].append(edge)
+    
+    # Update metadata
+    data['metadata']['num_nodes'] = len(data['nodes'])
+    data['metadata']['num_edges'] = len(data['edges'])
+    
+    # Save processed data
+    print(f"Saving processed data to {output_path}")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
-        json.dump(output_data, f, indent=2)
+        json.dump(data, f, indent=2)
     
-    print(f"Processing complete. Total graphs: {len(graphs)}")
+    print(f"Processing complete. Nodes: {data['metadata']['num_nodes']}, Edges: {data['metadata']['num_edges']}")
 
 if __name__ == "__main__":
     # Process Phase1 (benign only)
