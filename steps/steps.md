@@ -5,6 +5,7 @@ conda remove --prefix ./env --all -y
 
 
 # To activate this environment, use
+#     $ conda activate D:\CICAPT_IIoT_GIN\env
 #     $ conda activate E:\CICAPT_IIoT_GIN\env
 #     $ conda activate ./env
 #
